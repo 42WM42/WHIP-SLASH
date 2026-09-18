@@ -1,6 +1,14 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+// DOM Elements for Intro Overlay
+const enemyIntroOverlay = document.getElementById('enemy-intro-overlay');
+const introEnemyName = document.getElementById('intro-enemy-name');
+const introEnemyDesc = document.getElementById('intro-enemy-desc');
+const enemyIntroBtn = document.getElementById('enemy-intro-btn');
+const previewCanvas = document.getElementById('enemy-preview-canvas');
+const previewCtx = previewCanvas ? previewCanvas.getContext('2d') : null;
+
 // Game State
 let isRunning = false;
 let score = 0;
@@ -9,18 +17,58 @@ let screenShake = 0;
 
 // Wave System State
 let currentWave = 1;
-let waveState = 'IN_WAVE';
+let waveState = 'IN_WAVE'; // 'IN_WAVE', 'WAVE_PAUSE', 'INTRO_PAUSE'
 let waveTimer = 0;
 let enemiesRemainingToSpawn = 0;
 let spawnCooldown = 0;
+let seenEnemies = new Set();
+
+// Enemy Profiles & Descriptions
+const ENEMY_PROFILES = {
+  regular: {
+    name: 'SLASHER',
+    desc: 'Relentless frontline grunt. Charges at high speed and attempts to overwhelm you with swarming numbers.',
+    color: '#ff0055'
+  },
+  bouncing: {
+    name: 'HOPPER',
+    desc: 'Kinetic mobility drone. Bounces unpredictably across the arena to evade slashes and catch you off guard.',
+    color: '#00ff66'
+  },
+  shield: {
+    name: 'SHIELD GUARDIAN',
+    desc: 'Heavy vanguard bearing a directional kinetic shield. Frontal slashes are blocked—dash behind it or strike from above!',
+    color: '#00aaff'
+  },
+  drone: {
+    name: 'PLASMA DRONE',
+    desc: 'Airborne ranged unit. Hovers above ground and fires high-velocity plasma bolts downward at your position.',
+    color: '#aa00ff'
+  },
+  tank: {
+    name: 'BRUTE TANK',
+    desc: 'Heavy armored juggernaut. Absorbs massive blade impact with high mass and deals heavy knockback damage.',
+    color: '#ff00aa'
+  },
+  bomber: {
+    name: 'KAMIKAZE BOMBER',
+    desc: 'Volatile explosive runner. Charges toward you and ignites a short-fuse bomb. Destroy it before it detonates!',
+    color: '#ffaa00'
+  },
+  phantom: {
+    name: 'BLINK PHANTOM',
+    desc: 'Phase-shifting assassin. Teleports unpredictably across space to ambush you from blind spots.',
+    color: '#ff00ff'
+  }
+};
 
 // Physics Constants
 const GRAVITY = 0.50;
-const GROUND_Y = 430;
+const GROUND_Y = 360; // Raised ground level to provide more room to swing
 const STANDING_HIP_HEIGHT = 38;
 
 // Inputs
-const mouse = { x: 400, y: 250, prevX: 400, prevY: 250, vx: 0, vy: 0 };
+const mouse = { x: 400, y: 200, prevX: 400, prevY: 200, vx: 0, vy: 0 };
 const keys = {};
 
 // Verlet Physics Node
@@ -68,27 +116,23 @@ class Node {
   }
 }
 
-// Character Physics Nodes
+// Character Physics Nodes (Positions adjusted upward for new GROUND_Y)
 const ragdoll = {
-  head: new Node(400, 350, 9, 0.6),
-  chest: new Node(400, 370, 10, 0.9),
-  hip: new Node(400, 390, 8, 1.1),
+  head: new Node(400, 280, 9, 0.6),
+  chest: new Node(400, 300, 10, 0.9),
+  hip: new Node(400, 320, 8, 1.1),
   
-  // Noodle Control Points (Left Leg)
-  lKnee: new Node(394, 410, 5, 0.7),
+  lKnee: new Node(394, 340, 5, 0.7),
   lFoot: new Node(388, GROUND_Y, 6, 0.9),
 
-  // Noodle Control Points (Right Leg)
-  rKnee: new Node(406, 410, 5, 0.7),
+  rKnee: new Node(406, 340, 5, 0.7),
   rFoot: new Node(412, GROUND_Y, 6, 0.9),
   
-  // Sword Arm Noodle Control Points
-  elbow: new Node(412, 385, 4, 0.3, false),
-  hand: new Node(422, 395, 5, 0.4, false),
+  elbow: new Node(412, 315, 4, 0.3, false),
+  hand: new Node(422, 325, 5, 0.4, false),
 
-  // Off-Hand Arm Noodle Control Points
-  lElbow: new Node(392, 385, 4, 0.3, false),
-  lHand: new Node(392, 398, 4, 0.3, false),
+  lElbow: new Node(392, 315, 4, 0.3, false),
+  lHand: new Node(392, 328, 4, 0.3, false),
 
   hp: 100,
   maxHp: 100,
@@ -100,20 +144,20 @@ const ragdoll = {
   flopTimer: 0,
 
   reset() {
-    this.head.x = this.head.oldX = 400; this.head.y = this.head.oldY = 350;
-    this.chest.x = this.chest.oldX = 400; this.chest.y = this.chest.oldY = 370;
-    this.hip.x = this.hip.oldX = 400; this.hip.y = this.hip.oldY = 390;
+    this.head.x = this.head.oldX = 400; this.head.y = this.head.oldY = 280;
+    this.chest.x = this.chest.oldX = 400; this.chest.y = this.chest.oldY = 300;
+    this.hip.x = this.hip.oldX = 400; this.hip.y = this.hip.oldY = 320;
     
-    this.lKnee.x = this.lKnee.oldX = 394; this.lKnee.y = this.lKnee.oldY = 410;
+    this.lKnee.x = this.lKnee.oldX = 394; this.lKnee.y = this.lKnee.oldY = 340;
     this.lFoot.x = this.lFoot.oldX = 388; this.lFoot.y = this.lFoot.oldY = GROUND_Y;
     
-    this.rKnee.x = this.rKnee.oldX = 406; this.rKnee.y = this.rKnee.oldY = 410;
+    this.rKnee.x = this.rKnee.oldX = 406; this.rKnee.y = this.rKnee.oldY = 340;
     this.rFoot.x = this.rFoot.oldX = 412; this.rFoot.y = this.rFoot.oldY = GROUND_Y;
 
-    this.elbow.x = this.elbow.oldX = 412; this.elbow.y = this.elbow.oldY = 385;
-    this.hand.x = this.hand.oldX = 422; this.hand.y = this.hand.oldY = 395;
-    this.lElbow.x = this.lElbow.oldX = 392; this.lElbow.y = this.lElbow.oldY = 385;
-    this.lHand.x = this.lHand.oldX = 392; this.lHand.y = this.lHand.oldY = 398;
+    this.elbow.x = this.elbow.oldX = 412; this.elbow.y = this.elbow.oldY = 315;
+    this.hand.x = this.hand.oldX = 422; this.hand.y = this.hand.oldY = 325;
+    this.lElbow.x = this.lElbow.oldX = 392; this.lElbow.y = this.lElbow.oldY = 315;
+    this.lHand.x = this.lHand.oldX = 392; this.lHand.y = this.lHand.oldY = 328;
     
     this.hp = 100;
     this.iFrames = 0;
@@ -124,19 +168,17 @@ const ragdoll = {
   }
 };
 
-// Elastic Constraints tuned for springy noodle dynamics
+// Elastic Constraints
 const constraints = [
   { p1: ragdoll.head, p2: ragdoll.chest, len: 18, stiffness: 0.32 },
   { p1: ragdoll.chest, p2: ragdoll.hip, len: 18, stiffness: 0.32 },
   
-  // Flexible Leg Constraints
   { p1: ragdoll.hip, p2: ragdoll.lKnee, len: 20, stiffness: 0.28 },
   { p1: ragdoll.lKnee, p2: ragdoll.lFoot, len: 20, stiffness: 0.28 },
   
   { p1: ragdoll.hip, p2: ragdoll.rKnee, len: 20, stiffness: 0.28 },
   { p1: ragdoll.rKnee, p2: ragdoll.rFoot, len: 20, stiffness: 0.28 },
 
-  // Flexible Arm Constraints
   { p1: ragdoll.chest, p2: ragdoll.elbow, len: 19, stiffness: 0.25 },
   { p1: ragdoll.elbow, p2: ragdoll.hand, len: 19, stiffness: 0.25 },
   
@@ -165,8 +207,8 @@ function solveConstraint(c) {
 // Kinetic Sword
 const sword = {
   length: 62,
-  tipX: 400, tipY: 200,
-  prevTipX: 400, prevTipY: 200,
+  tipX: 400, tipY: 150,
+  prevTipX: 400, prevTipY: 150,
   speed: 0,
   trail: []
 };
@@ -175,6 +217,7 @@ const sword = {
 let enemies = [];
 let particles = [];
 let damageTexts = [];
+let projectiles = [];
 
 // Event Listeners
 window.addEventListener('mousemove', (e) => {
@@ -193,8 +236,106 @@ window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
 document.getElementById('start-btn').addEventListener('click', startGame);
 document.getElementById('restart-btn').addEventListener('click', startGame);
 
+enemyIntroBtn.addEventListener('click', () => {
+  enemyIntroOverlay.classList.add('hidden');
+  waveState = 'IN_WAVE';
+});
+
+function renderEnemyPreview(type) {
+  if (!previewCtx) return;
+  const w = previewCanvas.width;
+  const h = previewCanvas.height;
+
+  previewCtx.clearRect(0, 0, w, h);
+  previewCtx.fillStyle = '#080d1a';
+  previewCtx.fillRect(0, 0, w, h);
+
+  // Ground Line
+  previewCtx.strokeStyle = 'rgba(0, 255, 204, 0.3)';
+  previewCtx.lineWidth = 1.5;
+  previewCtx.beginPath();
+  previewCtx.moveTo(0, 105); previewCtx.lineTo(w, 105);
+  previewCtx.stroke();
+
+  const profile = ENEMY_PROFILES[type];
+  previewCtx.strokeStyle = profile.color;
+  previewCtx.shadowBlur = (type === 'tank' || type === 'phantom') ? 14 : 8;
+  previewCtx.shadowColor = profile.color;
+  previewCtx.lineCap = 'round';
+
+  const centerX = w / 2;
+  const groundY = type === 'drone' ? 65 : 105;
+
+  const scale = type === 'tank' ? 2.0 : (type === 'bouncing' ? 1.4 : (type === 'bomber' ? 1.5 : 1.6));
+  previewCtx.lineWidth = type === 'tank' ? 5.0 : 3.5;
+
+  const headR = 6 * scale;
+  const headY = groundY - 20 * scale;
+  const chestY = groundY - 8 * scale;
+  const hipY = groundY + 4 * scale;
+
+  // Head
+  previewCtx.beginPath();
+  previewCtx.arc(centerX, headY, headR, 0, Math.PI * 2);
+  previewCtx.stroke();
+
+  // Torso & Legs
+  previewCtx.beginPath();
+  previewCtx.moveTo(centerX, headY + headR);
+  previewCtx.lineTo(centerX, chestY);
+  previewCtx.lineTo(centerX, hipY);
+
+  const legOffset = 8 * scale;
+  previewCtx.lineTo(centerX + legOffset, groundY);
+  previewCtx.moveTo(centerX, hipY);
+  previewCtx.lineTo(centerX - legOffset, groundY);
+
+  // Arms & Specific Features
+  previewCtx.moveTo(centerX, chestY);
+  previewCtx.lineTo(centerX + 10 * scale, chestY + 4 * scale);
+  previewCtx.moveTo(centerX, chestY);
+  previewCtx.lineTo(centerX - 10 * scale, chestY + 4 * scale);
+  previewCtx.stroke();
+
+  if (type === 'shield') {
+    previewCtx.strokeStyle = '#00ffff';
+    previewCtx.lineWidth = 4;
+    previewCtx.beginPath();
+    previewCtx.moveTo(centerX + 16, groundY - 32 * scale);
+    previewCtx.lineTo(centerX + 16, groundY + 2 * scale);
+    previewCtx.stroke();
+  } else if (type === 'drone') {
+    previewCtx.strokeStyle = '#aa00ff';
+    previewCtx.lineWidth = 2;
+    previewCtx.beginPath();
+    previewCtx.arc(centerX, headY - 2, headR + 12, 0, Math.PI * 2);
+    previewCtx.stroke();
+  } else if (type === 'bomber') {
+    previewCtx.fillStyle = '#ffaa00';
+    previewCtx.beginPath();
+    previewCtx.arc(centerX, chestY, 7, 0, Math.PI * 2);
+    previewCtx.fill();
+  }
+
+  previewCtx.shadowBlur = 0;
+}
+
+function showEnemyIntro(type) {
+  const profile = ENEMY_PROFILES[type];
+  if (!profile) return;
+
+  waveState = 'INTRO_PAUSE';
+  introEnemyName.textContent = profile.name;
+  introEnemyDesc.textContent = profile.desc;
+  introEnemyName.style.color = profile.color;
+  introEnemyName.style.textShadow = `0 0 10px ${profile.color}`;
+
+  renderEnemyPreview(type);
+  enemyIntroOverlay.classList.remove('hidden');
+}
+
 function performDash() {
-  if (!isRunning || ragdoll.dashCooldown > 0 || ragdoll.flopTimer > 0) return;
+  if (!isRunning || ragdoll.dashCooldown > 0 || ragdoll.flopTimer > 0 || waveState === 'INTRO_PAUSE') return;
 
   const dx = mouse.x - ragdoll.chest.x;
   const dy = mouse.y - ragdoll.chest.y;
@@ -224,11 +365,13 @@ function performDash() {
 function startGame() {
   score = 0; 
   frameCount = 0;
-  enemies = []; particles = []; damageTexts = [];
+  enemies = []; particles = []; damageTexts = []; projectiles = [];
+  seenEnemies.clear();
   ragdoll.reset();
 
   document.getElementById('start-screen').classList.add('hidden');
   document.getElementById('gameover-screen').classList.add('hidden');
+  enemyIntroOverlay.classList.add('hidden');
   
   startWave(1);
   updateHUD();
@@ -242,6 +385,21 @@ function startWave(waveNum) {
   waveState = 'IN_WAVE';
   enemiesRemainingToSpawn = 3 + Math.floor(waveNum * 1.5);
   spawnCooldown = 0;
+
+  // Spaced Out Progression
+  let newTypeToIntroduce = null;
+  if (waveNum === 1 && !seenEnemies.has('regular')) newTypeToIntroduce = 'regular';
+  else if (waveNum === 3 && !seenEnemies.has('bouncing')) newTypeToIntroduce = 'bouncing';
+  else if (waveNum === 5 && !seenEnemies.has('shield')) newTypeToIntroduce = 'shield';
+  else if (waveNum === 8 && !seenEnemies.has('drone')) newTypeToIntroduce = 'drone';
+  else if (waveNum === 11 && !seenEnemies.has('tank')) newTypeToIntroduce = 'tank';
+  else if (waveNum === 14 && !seenEnemies.has('bomber')) newTypeToIntroduce = 'bomber';
+  else if (waveNum === 17 && !seenEnemies.has('phantom')) newTypeToIntroduce = 'phantom';
+
+  if (newTypeToIntroduce) {
+    seenEnemies.add(newTypeToIntroduce);
+    showEnemyIntro(newTypeToIntroduce);
+  }
 }
 
 function updateHUD() {
@@ -254,18 +412,16 @@ function spawnEnemy() {
   const spawnLeft = Math.random() < 0.5;
   const startX = spawnLeft ? -40 : canvas.width + 40;
 
-  let types = ['regular'];
-  if (currentWave >= 3) types.push('bouncing');
-  if (currentWave >= 5) types.push('tank');
+  // Spaced out pool expansion
+  let pool = ['regular'];
+  if (currentWave >= 3) pool.push('bouncing');
+  if (currentWave >= 5) pool.push('shield');
+  if (currentWave >= 8) pool.push('drone');
+  if (currentWave >= 11) pool.push('tank');
+  if (currentWave >= 14) pool.push('bomber');
+  if (currentWave >= 17) pool.push('phantom');
 
-  let rand = Math.random();
-  let selectedType = 'regular';
-
-  if (types.includes('tank') && rand < 0.2 + (currentWave * 0.015)) {
-    selectedType = 'tank';
-  } else if (types.includes('bouncing') && rand < 0.4) {
-    selectedType = 'bouncing';
-  }
+  const selectedType = pool[Math.floor(Math.random() * pool.length)];
 
   const hpScale = 1 + (currentWave - 1) * 0.07;
   const speedScale = 1 + Math.min(0.4, (currentWave - 1) * 0.03);
@@ -278,9 +434,47 @@ function spawnEnemy() {
       hp: Math.floor(110 * hpScale), maxHp: Math.floor(110 * hpScale),
       speed: (0.45 + Math.random() * 0.15) * speedScale,
       contactDamage: 16 + Math.floor(currentWave * 0.3),
-      hitCooldown: 0,
-      walkCycle: Math.random() * 10,
-      color: '#aa00ff'
+      hitCooldown: 0, walkCycle: Math.random() * 10, color: '#ff00aa'
+    });
+  } else if (selectedType === 'shield') {
+    enemies.push({
+      type: 'shield',
+      x: startX, y: GROUND_Y - 26, vx: 0, vy: 0,
+      radius: 24, mass: 1.6,
+      hp: Math.floor(55 * hpScale), maxHp: Math.floor(55 * hpScale),
+      speed: (0.65 + Math.random() * 0.2) * speedScale,
+      contactDamage: 12 + Math.floor(currentWave * 0.25),
+      hitCooldown: 0, walkCycle: Math.random() * 10, color: '#00aaff'
+    });
+  } else if (selectedType === 'drone') {
+    enemies.push({
+      type: 'drone',
+      x: startX, y: GROUND_Y - 210, vx: 0, vy: 0, // Drone position raised relative to new ground
+      radius: 20, mass: 0.8,
+      hp: Math.floor(32 * hpScale), maxHp: Math.floor(32 * hpScale),
+      speed: (0.8 + Math.random() * 0.3) * speedScale,
+      contactDamage: 8, shootTimer: 0,
+      hitCooldown: 0, walkCycle: Math.random() * 10, color: '#aa00ff'
+    });
+  } else if (selectedType === 'bomber') {
+    enemies.push({
+      type: 'bomber',
+      x: startX, y: GROUND_Y - 22, vx: 0, vy: 0,
+      radius: 22, mass: 1.0,
+      hp: Math.floor(25 * hpScale), maxHp: Math.floor(25 * hpScale),
+      speed: (1.3 + Math.random() * 0.3) * speedScale,
+      contactDamage: 22, fuse: 45,
+      hitCooldown: 0, walkCycle: Math.random() * 10, color: '#ffaa00'
+    });
+  } else if (selectedType === 'phantom') {
+    enemies.push({
+      type: 'phantom',
+      x: startX, y: GROUND_Y - 24, vx: 0, vy: 0,
+      radius: 22, mass: 1.0,
+      hp: Math.floor(45 * hpScale), maxHp: Math.floor(45 * hpScale),
+      speed: (0.9 + Math.random() * 0.3) * speedScale,
+      contactDamage: 14, teleportTimer: 0,
+      hitCooldown: 0, walkCycle: Math.random() * 10, color: '#ff00ff'
     });
   } else if (selectedType === 'bouncing') {
     enemies.push({
@@ -291,9 +485,7 @@ function spawnEnemy() {
       speed: (1.0 + Math.random() * 0.4) * speedScale,
       contactDamage: 8 + Math.floor(currentWave * 0.2),
       bouncePower: -7.5 - (Math.random() * 2.0),
-      hitCooldown: 0,
-      walkCycle: Math.random() * 10,
-      color: '#00ff66'
+      hitCooldown: 0, walkCycle: Math.random() * 10, color: '#00ff66'
     });
   } else {
     enemies.push({
@@ -303,9 +495,7 @@ function spawnEnemy() {
       hp: Math.floor(40 * hpScale), maxHp: Math.floor(40 * hpScale),
       speed: (0.75 + Math.random() * 0.4) * speedScale,
       contactDamage: 10 + Math.floor(currentWave * 0.25),
-      hitCooldown: 0,
-      walkCycle: Math.random() * 10,
-      color: spawnLeft ? '#ff0055' : '#ff4400'
+      hitCooldown: 0, walkCycle: Math.random() * 10, color: spawnLeft ? '#ff0055' : '#ff4400'
     });
   }
 }
@@ -313,7 +503,7 @@ function spawnEnemy() {
 function lineCircleIntersect(x1, y1, x2, y2, cx, cy, r) {
   const dx = x2 - x1; const dy = y2 - y1;
   const len = Math.hypot(dx, dy);
-  if (len === 0) return false;
+  if (len === 0) return { hit: false };
   const u = Math.max(0, Math.min(1, ((cx - x1) * dx + (cy - y1) * dy) / (len * len)));
   const nearestX = x1 + u * dx;
   const nearestY = y1 + u * dy;
@@ -334,6 +524,12 @@ function createFloatingText(x, y, text, color = '#fff') {
 
 function gameLoop() {
   if (!isRunning) return;
+
+  if (waveState === 'INTRO_PAUSE') {
+    requestAnimationFrame(gameLoop);
+    return;
+  }
+
   frameCount++;
 
   mouse.vx = mouse.x - mouse.prevX;
@@ -378,7 +574,6 @@ function gameLoop() {
   const idleSway = Math.sin(frameCount * 0.06) * 1.8;
   const idleBreath = Math.cos(frameCount * 0.08) * 1.2;
 
-  // Dynamic Limb & Body Physics Forces
   if (ragdoll.flopTimer <= 0) {
     const targetChestX = ragdoll.hip.x + (isGrounded ? idleSway * 0.5 : 0);
     const targetChestY = ragdoll.hip.y - 18 + idleBreath;
@@ -456,19 +651,36 @@ function gameLoop() {
   ragdoll.lElbow.update();
   ragdoll.lHand.update();
 
-  // Clamp Legs below hip
-  [ragdoll.lKnee, ragdoll.rKnee].forEach(knee => {
-    if (knee.y < ragdoll.hip.y + 2) {
-      knee.y = ragdoll.hip.y + 2;
-      knee.oldY = knee.y; 
+  // Joint Inversion Rules
+  const enforceLegJoints = (knee, foot, isLeft) => {
+    if (knee.y < ragdoll.hip.y + 4) {
+      knee.y = ragdoll.hip.y + 4;
+      knee.oldY = knee.y;
     }
-  });
-  [ragdoll.lFoot, ragdoll.rFoot].forEach(foot => {
-    if (foot.y < ragdoll.hip.y + 6) {
-      foot.y = ragdoll.hip.y + 6;
+    if (foot.y < knee.y + 2) {
+      foot.y = knee.y + 2;
       foot.oldY = foot.y;
     }
-  });
+
+    const midX = (ragdoll.hip.x + foot.x) / 2;
+    const midY = (ragdoll.hip.y + foot.y) / 2;
+    const kneeOffset = isLeft ? -3 : 3;
+    knee.x += (midX + kneeOffset - knee.x) * 0.25;
+    knee.y += (midY - knee.y) * 0.25;
+
+    const dx = foot.x - ragdoll.hip.x;
+    const dy = foot.y - ragdoll.hip.y;
+    const dist = Math.hypot(dx, dy);
+    const minLegDist = 22;
+    if (dist < minLegDist && dist > 0) {
+      const factor = (minLegDist - dist) / dist;
+      foot.x += dx * factor * 0.5;
+      foot.y += dy * factor * 0.5;
+    }
+  };
+
+  enforceLegJoints(ragdoll.lKnee, ragdoll.lFoot, true);
+  enforceLegJoints(ragdoll.rKnee, ragdoll.rFoot, false);
 
   // Sword Arm Tracking
   const armDx = mouse.x - ragdoll.chest.x;
@@ -490,7 +702,7 @@ function gameLoop() {
   ragdoll.elbow.x += (targetElbowX - ragdoll.elbow.x) * 0.7;
   ragdoll.elbow.y += (targetElbowY - ragdoll.elbow.y) * 0.7;
 
-  // Off-Hand Arm Natural Low Drop
+  // Off-Hand Arm Low Drop
   const walkSwing = Math.sin(ragdoll.walkCycle) * 12;
   const offHandBaseX = ragdoll.chest.x - 6;
   const offHandBaseY = ragdoll.chest.y + 26;
@@ -531,13 +743,65 @@ function gameLoop() {
   if (sword.trail.length > 6) sword.trail.shift();
   sword.trail.forEach(t => t.alpha -= 0.15);
 
-  // Enemy AI & Collision
-  enemies.forEach((enemy, eIndex) => {
+  // Update Projectiles
+  for (let pIdx = projectiles.length - 1; pIdx >= 0; pIdx--) {
+    const proj = projectiles[pIdx];
+    proj.x += proj.vx;
+    proj.y += proj.vy;
+
+    const distToChest = Math.hypot(ragdoll.chest.x - proj.x, ragdoll.chest.y - proj.y);
+    if (distToChest < ragdoll.chest.radius + 8 && ragdoll.iFrames <= 0) {
+      ragdoll.hp -= 12;
+      ragdoll.iFrames = 25;
+      createSparks(proj.x, proj.y, 10, '#aa00ff');
+      createFloatingText(ragdoll.chest.x, ragdoll.chest.y - 15, '-12 HP', '#ff3333');
+      updateHUD();
+      projectiles.splice(pIdx, 1);
+      continue;
+    }
+
+    if (proj.x < -20 || proj.x > canvas.width + 20 || proj.y > GROUND_Y) {
+      projectiles.splice(pIdx, 1);
+    }
+  }
+
+  // Enemy AI & Combat Loop
+  for (let eIndex = enemies.length - 1; eIndex >= 0; eIndex--) {
+    const enemy = enemies[eIndex];
     if (enemy.hitCooldown > 0) enemy.hitCooldown--;
 
     const eDir = Math.sign(ragdoll.hip.x - enemy.x);
-    enemy.vx += eDir * (0.22 * (enemy.speed || 1));
-    enemy.vy += GRAVITY;
+
+    // AI Behaviors
+    if (enemy.type === 'drone') {
+      enemy.vx += (ragdoll.hip.x - enemy.x) * 0.008;
+      enemy.vy = Math.sin(frameCount * 0.05) * 1.5;
+      enemy.shootTimer++;
+      if (enemy.shootTimer > 110) {
+        enemy.shootTimer = 0;
+        const angle = Math.atan2(ragdoll.chest.y - enemy.y, ragdoll.chest.x - enemy.x);
+        projectiles.push({
+          x: enemy.x, y: enemy.y,
+          vx: Math.cos(angle) * 5.5,
+          vy: Math.sin(angle) * 5.5
+        });
+        createSparks(enemy.x, enemy.y, 6, '#aa00ff');
+      }
+    } else if (enemy.type === 'phantom') {
+      enemy.teleportTimer++;
+      if (enemy.teleportTimer > 130) {
+        enemy.teleportTimer = 0;
+        createSparks(enemy.x, enemy.y, 15, '#ff00ff');
+        enemy.x = ragdoll.hip.x + (Math.random() < 0.5 ? -110 : 110);
+        enemy.y = GROUND_Y - enemy.radius;
+        createSparks(enemy.x, enemy.y, 15, '#ff00ff');
+      } else {
+        enemy.vx += eDir * (0.22 * enemy.speed);
+      }
+    } else {
+      enemy.vx += eDir * (0.22 * (enemy.speed || 1));
+      enemy.vy += GRAVITY;
+    }
 
     enemy.vx *= 0.88;
     enemy.x += enemy.vx;
@@ -545,7 +809,7 @@ function gameLoop() {
 
     enemy.walkCycle += Math.abs(enemy.vx) * 0.25 + 0.05;
 
-    if (enemy.y >= GROUND_Y - enemy.radius) {
+    if (enemy.type !== 'drone' && enemy.y >= GROUND_Y - enemy.radius) {
       enemy.y = GROUND_Y - enemy.radius;
       if (enemy.type === 'bouncing') {
         enemy.vy = enemy.bouncePower;
@@ -558,6 +822,22 @@ function gameLoop() {
     const distToHip = Math.hypot(ragdoll.hip.x - enemy.x, ragdoll.hip.y - enemy.y);
     const distToChest = Math.hypot(ragdoll.chest.x - enemy.x, ragdoll.chest.y - enemy.y);
     const isTouchingPlayer = (distToHip < ragdoll.hip.radius + enemy.radius + 4 || distToChest < ragdoll.chest.radius + enemy.radius + 4);
+
+    if (enemy.type === 'bomber' && distToHip < 60) {
+      enemy.fuse--;
+      if (enemy.fuse <= 0) {
+        createSparks(enemy.x, enemy.y, 35, '#ffaa00');
+        if (distToHip < 80 && ragdoll.iFrames <= 0) {
+          ragdoll.hp -= enemy.contactDamage;
+          ragdoll.iFrames = 30;
+          screenShake = 12;
+          createFloatingText(ragdoll.chest.x, ragdoll.chest.y - 15, `BOOM! -${enemy.contactDamage} HP`, '#ffaa00');
+          updateHUD();
+        }
+        enemies.splice(eIndex, 1);
+        continue;
+      }
+    }
 
     if (isTouchingPlayer && ragdoll.iFrames <= 0) {
       const isParrying = sword.speed > 5.0 || ragdoll.dashTimer > 0;
@@ -594,6 +874,7 @@ function gameLoop() {
           isRunning = false;
           document.getElementById('final-score').textContent = `Reached Wave ${currentWave} | Kills: ${score}`;
           document.getElementById('gameover-screen').classList.remove('hidden');
+          return;
         }
       }
     }
@@ -605,8 +886,20 @@ function gameLoop() {
     if ((hitData.hit || (ragdoll.dashTimer > 0 && isTouchingPlayer)) && enemy.hitCooldown <= 0) {
       const MIN_CUT_SPEED = 4.5; 
       if (effectiveSpeed > MIN_CUT_SPEED) {
+
+        // Shield Guardian Frontal Block Check
+        if (enemy.type === 'shield' && ragdoll.dashTimer <= 0) {
+          const slashFromRight = sword.tipX < sword.prevTipX;
+          const enemyFacingRight = enemy.x < ragdoll.hip.x;
+          if ((enemyFacingRight && slashFromRight) || (!enemyFacingRight && !slashFromRight)) {
+            enemy.hitCooldown = 12;
+            createSparks(enemy.x, enemy.y, 10, '#00ffff');
+            createFloatingText(enemy.x, enemy.y - 20, 'BLOCKED!', '#00ffff');
+            continue;
+          }
+        }
+
         const excessSpeed = effectiveSpeed - MIN_CUT_SPEED;
-        
         let rawDamage = Math.floor(12 + Math.sqrt(excessSpeed) * 5.0);
         if (ragdoll.dashTimer > 0) rawDamage += 10;
         if (enemy.type === 'tank') rawDamage = Math.floor(rawDamage * 0.7);
@@ -643,17 +936,21 @@ function gameLoop() {
         }
       }
     }
-  });
+  }
 
-  // Particles & Damage Text
-  particles.forEach((p, pIdx) => {
+  // Update Particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
     p.x += p.vx; p.y += p.vy; p.life -= p.decay;
-    if (p.life <= 0) particles.splice(pIdx, 1);
-  });
-  damageTexts.forEach((dt, dtIdx) => {
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+
+  // Update Damage Text
+  for (let i = damageTexts.length - 1; i >= 0; i--) {
+    const dt = damageTexts[i];
     dt.y += dt.vy; dt.life -= 0.03;
-    if (dt.life <= 0) damageTexts.splice(dtIdx, 1);
-  });
+    if (dt.life <= 0) damageTexts.splice(i, 1);
+  }
 
   // Render Loop
   ctx.save();
@@ -680,16 +977,23 @@ function gameLoop() {
     ctx.beginPath(); ctx.moveTo(t.hx, t.hy); ctx.lineTo(t.tx, t.ty); ctx.stroke();
   });
 
-  // Player Noodle Stickman Render
+  // Projectiles Render
+  projectiles.forEach(proj => {
+    ctx.fillStyle = '#aa00ff';
+    ctx.shadowBlur = 10; ctx.shadowColor = '#aa00ff';
+    ctx.beginPath(); ctx.arc(proj.x, proj.y, 5, 0, Math.PI * 2); ctx.fill();
+  });
+  ctx.shadowBlur = 0;
+
+  // Player Stickman Render
   const isInvincible = ragdoll.iFrames > 0;
   const isFlickerOff = isInvincible && Math.floor(frameCount / 4) % 2 === 0;
 
-  // Yellow for Dashing, Red for Damage / i-Frames, White for Normal
   let playerColor = '#ffffff';
   if (ragdoll.dashTimer > 0) {
-    playerColor = '#ffea00'; // Yellow Dash
+    playerColor = '#ffea00';
   } else if (ragdoll.iFrames > 0) {
-    playerColor = '#ff3333'; // Red Damage Flash
+    playerColor = '#ff3333';
   }
 
   ctx.strokeStyle = playerColor;
@@ -698,13 +1002,13 @@ function gameLoop() {
   ctx.lineJoin = 'round';
 
   if (!isFlickerOff) {
-    // Render Off-Hand Noodle Arm (Smooth Quadratic Curve)
+    // Off-Hand Arm
     ctx.beginPath();
     ctx.moveTo(ragdoll.chest.x, ragdoll.chest.y);
     ctx.quadraticCurveTo(ragdoll.lElbow.x, ragdoll.lElbow.y, ragdoll.lHand.x, ragdoll.lHand.y);
     ctx.stroke();
 
-    // Head & Torso Spine
+    // Head & Torso
     ctx.beginPath(); ctx.arc(ragdoll.head.x, ragdoll.head.y, ragdoll.head.radius, 0, Math.PI * 2); ctx.stroke();
 
     ctx.beginPath();
@@ -713,19 +1017,19 @@ function gameLoop() {
     ctx.lineTo(ragdoll.hip.x, ragdoll.hip.y);
     ctx.stroke();
 
-    // Left Noodle Leg (Smooth Quadratic Curve)
+    // Left Leg
     ctx.beginPath();
     ctx.moveTo(ragdoll.hip.x, ragdoll.hip.y);
     ctx.quadraticCurveTo(ragdoll.lKnee.x, ragdoll.lKnee.y, ragdoll.lFoot.x, ragdoll.lFoot.y);
     ctx.stroke();
 
-    // Right Noodle Leg (Smooth Quadratic Curve)
+    // Right Leg
     ctx.beginPath();
     ctx.moveTo(ragdoll.hip.x, ragdoll.hip.y);
     ctx.quadraticCurveTo(ragdoll.rKnee.x, ragdoll.rKnee.y, ragdoll.rFoot.x, ragdoll.rFoot.y);
     ctx.stroke();
     
-    // Sword Noodle Arm (Smooth Quadratic Curve)
+    // Sword Arm
     ctx.beginPath();
     ctx.moveTo(ragdoll.chest.x, ragdoll.chest.y);
     ctx.quadraticCurveTo(ragdoll.elbow.x, ragdoll.elbow.y, ragdoll.hand.x, ragdoll.hand.y);
@@ -797,11 +1101,11 @@ function gameLoop() {
   // Enemies
   enemies.forEach(enemy => {
     ctx.strokeStyle = enemy.color;
-    ctx.shadowBlur = enemy.type === 'tank' ? 14 : 8;
+    ctx.shadowBlur = (enemy.type === 'tank' || enemy.type === 'phantom') ? 14 : 8;
     ctx.shadowColor = enemy.color;
     ctx.lineCap = 'round';
 
-    const scale = enemy.type === 'tank' ? 2.2 : (enemy.type === 'bouncing' ? 1.45 : 1.7);
+    const scale = enemy.type === 'tank' ? 2.2 : (enemy.type === 'bouncing' ? 1.45 : (enemy.type === 'bomber' ? 1.5 : 1.7));
     ctx.lineWidth = enemy.type === 'tank' ? 5.5 : 4.0;
 
     const headR = 6.5 * scale;
@@ -825,12 +1129,35 @@ function gameLoop() {
     ctx.moveTo(enemy.x, hipY);
     ctx.lineTo(enemy.x - legSwing, enemy.y + 16 * scale - (4 * scale - legLift));
 
-    const armAngle = Math.atan2(ragdoll.chest.y - chestY, ragdoll.chest.x - enemy.x);
+    const enemyArmAngle = Math.atan2(ragdoll.chest.y - chestY, ragdoll.chest.x - enemy.x);
     const armReach = 12 * scale;
 
     ctx.moveTo(enemy.x, chestY);
-    ctx.lineTo(enemy.x + Math.cos(armAngle) * armReach, chestY + Math.sin(armAngle) * armReach);
+    ctx.lineTo(enemy.x + Math.cos(enemyArmAngle) * armReach, chestY + Math.sin(enemyArmAngle) * armReach);
     ctx.stroke();
+
+    // Specific Enemy Overlays
+    if (enemy.type === 'shield') {
+      ctx.strokeStyle = '#00ffff';
+      ctx.lineWidth = 4.5;
+      const shieldX = enemy.x + (enemy.x < ragdoll.hip.x ? 18 : -18);
+      ctx.beginPath();
+      ctx.moveTo(shieldX, enemy.y - 32);
+      ctx.lineTo(shieldX, enemy.y + 10);
+      ctx.stroke();
+    } else if (enemy.type === 'drone') {
+      ctx.strokeStyle = '#aa00ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(enemy.x, headY, headR + 10, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (enemy.type === 'bomber') {
+      ctx.fillStyle = enemy.fuse < 20 && Math.floor(frameCount / 4) % 2 === 0 ? '#ffffff' : '#ffaa00';
+      ctx.beginPath();
+      ctx.arc(enemy.x, chestY, 8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     ctx.shadowBlur = 0;
 
     if (enemy.hp < enemy.maxHp) {

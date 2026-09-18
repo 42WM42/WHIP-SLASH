@@ -28,7 +28,8 @@
       overflow: hidden;
     }
 
-    canvas {
+    /* Target main game canvas specifically so it doesn't stretch the preview canvas */
+    #gameCanvas {
       display: block;
       width: 100%;
       height: 100%;
@@ -80,7 +81,7 @@
     .overlay {
       position: absolute;
       inset: 0;
-      background: rgba(3, 5, 12, 0.88);
+      background: rgba(3, 5, 12, 0.92);
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -108,8 +109,8 @@
       font-size: 13px;
       color: #88aacc;
       margin-bottom: 20px;
-      max-width: 420px;
-      line-height: 1.4;
+      max-width: 440px;
+      line-height: 1.5;
     }
 
     .btn {
@@ -128,6 +129,18 @@
     .btn:hover {
       transform: scale(1.05);
       box-shadow: 0 0 16px rgba(0, 255, 204, 0.8);
+    }
+
+    /* Fixed Enemy Preview Canvas Dimensions */
+    #enemy-preview-canvas {
+      width: 130px;
+      height: 130px;
+      background: rgba(10, 15, 30, 0.8);
+      border: 1px solid #00ffcc;
+      border-radius: 8px;
+      box-shadow: 0 0 12px rgba(0, 255, 204, 0.2);
+      margin-bottom: 12px;
+      display: block;
     }
   </style>
 </head>
@@ -151,11 +164,21 @@
     <div class="overlay" id="start-screen">
       <h1>WHIP-SLASH</h1>
       <p>
-        • <b>AIM SWORD:</b> Move Mouse<br>
-        • <b>MOVE / JUMP:</b> Hold Left Mouse Click<br>
-        • <b>ATTACK:</b> Whip your mouse fast! Faster swings deal higher kinetic damage. Gentle touches do nothing!
+        • <b>MOVE:</b> A / D or Left / Right Arrows<br>
+        • <b>JUMP:</b> W, Up Arrow, or Space<br>
+        • <b>DASH:</b> Left Mouse Click<br>
+        • <b>ATTACK:</b> Whip your mouse fast! Kinetic speed slashes through enemies.
       </p>
       <button class="btn" id="start-btn">ENTER ARENA</button>
+    </div>
+
+    <!-- NEW ENEMY POPUP SCREEN -->
+    <div class="overlay hidden" id="enemy-intro-overlay">
+      <div style="font-size: 11px; color: #ff0055; letter-spacing: 2px; font-weight: bold; margin-bottom: 4px;">WARNING: NEW ENEMY TYPE DETECTED</div>
+      <h2 id="intro-enemy-name" style="color: #00ffcc; font-size: 26px; text-shadow: 0 0 10px #00ffcc; margin-bottom: 10px;">SLASHER</h2>
+      <canvas id="enemy-preview-canvas" width="130" height="130"></canvas>
+      <p id="intro-enemy-desc" style="font-size: 12px; color: #b0d0e0; max-width: 360px; margin-bottom: 18px; line-height: 1.4;"></p>
+      <button class="btn" id="enemy-intro-btn">ENGAGE</button>
     </div>
 
     <!-- GAME OVER SCREEN -->
