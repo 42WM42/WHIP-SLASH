@@ -5,6 +5,7 @@
   <title>WHIP-SLASH</title>
   <style>
     * {
+      
       box-sizing: border-box;
       user-select: none;
       margin: 0;
@@ -63,7 +64,7 @@
       overflow: hidden;
       margin-top: 4px;
     }
-
+    /* The inner bar will be dynamically resized via JS to reflect current HP */
     .hp-bar-inner {
       width: 100%;
       height: 100%;
@@ -142,6 +143,98 @@
       margin-bottom: 12px;
       display: block;
     }
+
+    /* Wave End Roguelite Upgrade Overlay */
+    #upgrade-overlay {
+      z-index: 15;
+      background: rgba(2, 3, 7, 0.92);
+      backdrop-filter: blur(6px);
+    }
+
+    .upgrade-title-header {
+      font-size: 24px;
+      font-weight: bold;
+      color: #00ffcc;
+      text-shadow: 0 0 12px #00ffcc;
+      margin-bottom: 16px;
+      font-family: monospace;
+    }
+
+    .upgrade-cards-container {
+      display: flex;
+      gap: 14px;
+      justify-content: center;
+      align-items: stretch;
+      max-width: 95%;
+    }
+
+    .upgrade-card {
+      background: #080d1a;
+      border: 2px solid #334466;
+      border-radius: 10px;
+      padding: 16px;
+      width: 210px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+      pointer-events: auto;
+      text-align: left;
+      font-family: monospace;
+    }
+
+    .upgrade-card:hover {
+      transform: translateY(-5px) scale(1.03);
+      background: #0e172e;
+    }
+
+    .card-category {
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+
+    .card-rarity {
+      font-size: 12px;
+      font-weight: bold;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .card-name {
+      font-size: 15px;
+      font-weight: bold;
+      color: #fff;
+      margin-bottom: 10px;
+    }
+
+    .card-desc {
+      font-size: 11px;
+      color: #ccddff;
+      line-height: 1.35;
+      margin-bottom: 14px;
+      flex-grow: 1;
+    }
+
+    .card-select-btn {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid currentColor;
+      color: inherit;
+      padding: 8px;
+      font-family: monospace;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: center;
+      width: 100%;
+    }
+
+    .card-select-btn:hover {
+      background: rgba(255,255,255,0.2);
+    }
   </style>
 </head>
 <body>
@@ -179,6 +272,12 @@
       <canvas id="enemy-preview-canvas" width="130" height="130"></canvas>
       <p id="intro-enemy-desc" style="font-size: 12px; color: #b0d0e0; max-width: 360px; margin-bottom: 18px; line-height: 1.4;"></p>
       <button class="btn" id="enemy-intro-btn">ENGAGE</button>
+    </div>
+
+    <!-- UPGRADE SELECTION OVERLAY -->
+    <div class="overlay hidden" id="upgrade-overlay">
+      <div class="upgrade-title-header">CHOOSE AN UPGRADE</div>
+      <div class="upgrade-cards-container" id="cards-wrapper"></div>
     </div>
 
     <!-- GAME OVER SCREEN -->
