@@ -53,6 +53,7 @@ const playerStats = {
   damageReduce: 0,
   thorns: 0,
 
+  // Resets all player stats to their default values
   reset() {
     this.maxHp = 100;
     this.damageMult = 1.0;
